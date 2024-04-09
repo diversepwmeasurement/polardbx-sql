@@ -1,52 +1,56 @@
-name: ci
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
-env:
-  MAVEN_CUSTOM_OPTS: "-Xmx4g -XX:+ExitOnOutOfMemoryError"
-  RETRY: .github/bin/retry
-
-concurrency: 
-  # main branch should complete running
-  group: ${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+concurrency:
   cancel-in-progress: true
-
+  group: ${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha)
+    || format('ci-{0}', github.ref) }}
+env:
+  MAVEN_CUSTOM_OPTS: -Xmx4g -XX:+ExitOnOutOfMemoryError
+  RETRY: .github/bin/retry
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      name: Free Disk Space
+      run: 'df -h
+
+        sudo apt-get clean
+
+        df -h
+
+        '
+    - continue-on-error: true
+      uses: actions/checkout@v2
+      with:
+        submodules: 'true'
+    - continue-on-error: true
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - continue-on-error: true
+      id: cache-maven
+      name: Cache local Maven repository
+      uses: actions/cache@v2
+      with:
+        key: ${{ runner.os }}-maven-2-${{ hashFiles('**/pom.xml') }}
+        path: ~/.m2/repository
+        restore-keys: '${{ runner.os }}-maven-2-
+
+          '
+    - continue-on-error: true
+      if: steps.cache-maven.outputs.cache-hit != 'true'
+      name: Populate maven cache
+      run: ./mvnw de.qaware.maven:go-offline-maven-plugin:resolve-dependencies
+    - continue-on-error: true
+      name: Maven Build
+      run: 'export MAVEN_OPTS="${MAVEN_CUSTOM_OPTS}"
+
+        ./mvnw -T 1C clean package install -DskipTests -Dcheckstyle.skip=true -Dmaven.javadoc.skip=true
+
+        '
     strategy:
       fail-fast: false
     timeout-minutes: 200
-    steps:
-      - name: Free Disk Space
-        run: |
-          df -h
-          sudo apt-get clean
-          df -h
-      - uses: actions/checkout@v2
-        with:
-          submodules: 'true'
-      - uses: actions/setup-java@v1
-        with:
-          java-version: 8
-      - name: Cache local Maven repository
-        id: cache-maven
-        uses: actions/cache@v2
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-2-
-      - name: Populate maven cache
-        if: steps.cache-maven.outputs.cache-hit != 'true'
-        run: ./mvnw de.qaware.maven:go-offline-maven-plugin:resolve-dependencies
-      - name: Maven Build
-        run: |
-          export MAVEN_OPTS="${MAVEN_CUSTOM_OPTS}"
-          ./mvnw -T 1C clean package install -DskipTests -Dcheckstyle.skip=true -Dmaven.javadoc.skip=true
+name: ci
+on:
+  repository_dispatch:
+    types: trigger-ga___ci.yaml
